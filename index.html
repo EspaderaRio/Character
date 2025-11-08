@@ -197,6 +197,8 @@
      <h1 id="game-title">🏀 3D Basketball</h1>
      <p id="score">Score: 0</p>
      <p id="attempts">Shots: 0</p>
+     <p id="timer" style="color: #ff6600; font-weight: bold; margin: 5px 0 0 0;">Timer: 10s</p>
+     <p id="stage-info" style="color: #4ade80; font-weight: bold; margin: 5px 0 0 0; font-size: 14px;">Stage: Normal</p>
     </div>
    </div>
    <div id="instructions">
@@ -243,6 +245,12 @@
     let mouseY = 0;
     let shootingAngle = 45;
     let playerHeight = 1.8;
+    let hoopMoving = false;
+    let hoopDirection = 1;
+    let hoopSpeed = 0.02;
+    let shotTimer = 0;
+    let maxShotTime = 10;
+    let timerActive = false;
     
     const playerPositions = {
       center: { x: 0, y: playerHeight, z: 6 },
@@ -388,6 +396,12 @@
         chargePower = 0;
         document.getElementById('power-meter').style.display = 'block';
         document.getElementById('shooting-guide').style.display = 'block';
+        
+        // Start shot timer if not already active
+        if (!timerActive) {
+          timerActive = true;
+          shotTimer = maxShotTime;
+        }
       }
     }
 
@@ -431,7 +445,7 @@
       
       // Calculate trajectory points
       const ballPosition = basketball.position.clone();
-      const hoopPosition = new THREE.Vector3(0, 5, -5);
+      const hoopPosition = new THREE.Vector3(hoopRim.position.x, hoopRim.position.y, hoopRim.position.z);
       const direction = hoopPosition.clone().sub(ballPosition).normalize();
       
       const power = Math.max(0.5, chargePower / maxChargePower);
@@ -500,7 +514,7 @@
       document.getElementById('attempts').textContent = `Shots: ${attempts}`;
       
       const power = Math.max(0.5, chargePower / maxChargePower);
-      const hoopPosition = new THREE.Vector3(0, 5, -5);
+      const hoopPosition = new THREE.Vector3(hoopRim.position.x, hoopRim.position.y, hoopRim.position.z);
       const ballPosition = basketball.position.clone();
       
       // Calculate direction to hoop
@@ -517,7 +531,7 @@
     }
 
     function checkScore() {
-      const hoopCenter = new THREE.Vector3(0, 5, -5);
+      const hoopCenter = new THREE.Vector3(hoopRim.position.x, hoopRim.position.y, hoopRim.position.z);
       const ballToHoop = basketball.position.clone().sub(hoopCenter);
       const horizontalDistance = Math.sqrt(ballToHoop.x * ballToHoop.x + ballToHoop.z * ballToHoop.z);
       
@@ -528,6 +542,13 @@
         
         score++;
         document.getElementById('score').textContent = `Score: ${score}`;
+        
+        // Check if hoop should start moving
+        if (score >= 5 && !hoopMoving) {
+          hoopMoving = true;
+          document.getElementById('stage-info').textContent = 'Stage: Moving Hoop!';
+          document.getElementById('stage-info').style.color = '#ef4444';
+        }
         
         // Ball color change
         basketball.material.color.setHex(0x00ff00);
@@ -651,11 +672,70 @@
         basketball.position.set(playerPos.x, playerPos.y - 0.5, playerPos.z - 0.5);
         ballVelocity.set(0, 0, 0);
         ballInMotion = false;
+        
+        // Reset timer for next shot
+        timerActive = false;
+        shotTimer = maxShotTime;
+        document.getElementById('timer').textContent = `Timer: ${maxShotTime}s`;
+        document.getElementById('timer').style.color = '#ff6600';
       }, 1000);
     }
 
     function animate() {
       requestAnimationFrame(animate);
+      
+      // Update shot timer
+      if (timerActive && !ballInMotion) {
+        shotTimer -= 0.016; // ~60fps
+        const timeLeft = Math.max(0, Math.ceil(shotTimer));
+        document.getElementById('timer').textContent = `Timer: ${timeLeft}s`;
+        
+        // Change color as time runs out
+        if (timeLeft <= 3) {
+          document.getElementById('timer').style.color = '#ef4444';
+        } else if (timeLeft <= 5) {
+          document.getElementById('timer').style.color = '#fbbf24';
+        }
+        
+        // Force shot if time runs out
+        if (shotTimer <= 0 && !ballInMotion) {
+          if (isCharging) {
+            // Auto-shoot with current power
+            isCharging = false;
+            document.getElementById('power-meter').style.display = 'none';
+            document.getElementById('shooting-guide').style.display = 'none';
+            
+            const existingGuide = scene.getObjectByName('trajectoryGuide');
+            if (existingGuide) {
+              scene.remove(existingGuide);
+            }
+            
+            shootBall();
+          } else {
+            // Force a weak shot
+            shootingAngle = 45;
+            chargePower = 20;
+            shootBall();
+          }
+        }
+      }
+      
+      // Move hoop if in moving stage
+      if (hoopMoving && !ballInMotion) {
+        hoopRim.position.x += hoopDirection * hoopSpeed;
+        backboard.position.x = hoopRim.position.x;
+        
+        // Update net position to follow hoop
+        const net = scene.children.find(child => child.geometry && child.geometry.type === 'CylinderGeometry' && child.material.wireframe);
+        if (net) {
+          net.position.x = hoopRim.position.x;
+        }
+        
+        // Reverse direction at boundaries
+        if (hoopRim.position.x > 2 || hoopRim.position.x < -2) {
+          hoopDirection *= -1;
+        }
+      }
       
       if (isCharging) {
         chargePower = Math.min(chargePower + chargeRate, maxChargePower);
@@ -717,6 +797,12 @@
       document.getElementById('attempts').style.fontSize = `${baseSize}px`;
       document.getElementById('attempts').style.fontFamily = `${customFont}, ${baseFontStack}`;
       document.getElementById('attempts').style.color = config.text_color || defaultConfig.text_color;
+      
+      document.getElementById('timer').style.fontSize = `${baseSize}px`;
+      document.getElementById('timer').style.fontFamily = `${customFont}, ${baseFontStack}`;
+      
+      document.getElementById('stage-info').style.fontSize = `${baseSize * 0.875}px`;
+      document.getElementById('stage-info').style.fontFamily = `${customFont}, ${baseFontStack}`;
       
       document.getElementById('score-board').style.background = `${config.secondary_color || defaultConfig.secondary_color}`;
       document.getElementById('instructions').style.background = `${config.secondary_color || defaultConfig.secondary_color}`;
@@ -795,5 +881,5 @@
       init();
     }
   </script>
- <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'99b3b45da38dba08',t:'MTc2MjU5MDU4Ni4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+ <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'99b3bec1a309ba08',t:'MTc2MjU5MTAxMi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
