@@ -397,6 +397,13 @@
         isCharging = false;
         document.getElementById('power-meter').style.display = 'none';
         document.getElementById('shooting-guide').style.display = 'none';
+        
+        // Remove trajectory guide
+        const existingGuide = scene.getObjectByName('trajectoryGuide');
+        if (existingGuide) {
+          scene.remove(existingGuide);
+        }
+        
         shootBall();
       }
     }
@@ -408,6 +415,67 @@
       document.getElementById('angle-arrow').style.transform = 
         `translate(-50%, -100%) rotate(${arrowRotation}deg)`;
       document.getElementById('angle-text').textContent = `${Math.round(shootingAngle)}°`;
+      
+      // Update trajectory guide line
+      updateTrajectoryGuide();
+    }
+    
+    function updateTrajectoryGuide() {
+      // Remove existing guide line
+      const existingGuide = scene.getObjectByName('trajectoryGuide');
+      if (existingGuide) {
+        scene.remove(existingGuide);
+      }
+      
+      if (!isCharging) return;
+      
+      // Calculate trajectory points
+      const ballPosition = basketball.position.clone();
+      const hoopPosition = new THREE.Vector3(0, 5, -5);
+      const direction = hoopPosition.clone().sub(ballPosition).normalize();
+      
+      const power = Math.max(0.5, chargePower / maxChargePower);
+      const angleRad = (shootingAngle * Math.PI) / 180;
+      const baseSpeed = power * 0.2 + 0.1;
+      
+      const initialVelocity = new THREE.Vector3(
+        direction.x * baseSpeed * Math.cos(angleRad) + mouseX * 0.02,
+        baseSpeed * Math.sin(angleRad) + 0.08,
+        direction.z * baseSpeed * Math.cos(angleRad) + mouseY * 0.01
+      );
+      
+      // Create trajectory points
+      const points = [];
+      const tempPos = ballPosition.clone();
+      const tempVel = initialVelocity.clone();
+      const timeStep = 0.1;
+      
+      for (let i = 0; i < 100; i++) {
+        points.push(tempPos.clone());
+        
+        tempVel.y += gravity * timeStep;
+        tempPos.add(tempVel.clone().multiplyScalar(timeStep));
+        
+        // Stop if ball hits ground or goes too far
+        if (tempPos.y < 0.3 || tempPos.distanceTo(ballPosition) > 15) {
+          break;
+        }
+      }
+      
+      // Create the guide line
+      if (points.length > 1) {
+        const geometry = new THREE.BufferGeometry().setFromPoints(points);
+        const material = new THREE.LineBasicMaterial({ 
+          color: 0xffffff,
+          transparent: true,
+          opacity: 0.4,
+          linewidth: 3
+        });
+        
+        const trajectoryLine = new THREE.Line(geometry, material);
+        trajectoryLine.name = 'trajectoryGuide';
+        scene.add(trajectoryLine);
+      }
     }
     
     function changePosition(position) {
@@ -727,5 +795,5 @@
       init();
     }
   </script>
- <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'99b3a90b74abba08',t:'MTc2MjU5MDEyMy4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+ <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'99b3b45da38dba08',t:'MTc2MjU5MDU4Ni4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
